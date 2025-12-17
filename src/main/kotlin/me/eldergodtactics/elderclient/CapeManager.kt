@@ -1,0 +1,181 @@
+package me.eldergodtactics.elderclient
+
+import net.minecraft.client.Minecraft
+import net.minecraft.client.renderer.texture.DynamicTexture
+import net.minecraft.resources.ResourceLocation
+import com.mojang.blaze3d.platform.NativeImage
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+
+object CapeManager {
+    @Volatile
+    var capeFilePath: String = ""
+
+    @Volatile
+    var capeLoaded: Boolean = false
+
+    @Volatile
+    var capeTextureLocation: ResourceLocation? = null
+
+    @Volatile
+    var dynamicTexture: DynamicTexture? = null
+    private val capesDir: File = File(System.getProperty("user.home"), "Eldercapes")
+    private val previewCache: MutableMap<String, ResourceLocation> = ConcurrentHashMap()
+
+    init {
+        if (!capesDir.exists()) {
+            try {
+                capesDir.mkdirs()
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    fun listCapes(): List<File> {
+        return try {
+            capesDir.listFiles { f -> f.isFile && (f.name.endsWith(".png", true) || f.name.endsWith(".jpg", true) || f.name.endsWith(".jpeg", true)) }
+                ?.sortedBy { it.name.lowercase() }
+                ?: emptyList()
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    fun getPreviewLocationForPath(path: String): ResourceLocation? {
+        try {
+            val file = File(path)
+            if (!file.exists()) return null
+
+            previewCache[path]?.let { return it }
+
+            FileInputStream(file).use { fis ->
+                val img = NativeImage.read(fis) ?: return null
+                val dyn = DynamicTexture(img)
+                val safeName = "preview_${path.hashCode().toString().replace('-', 'n')}"
+                val id = ResourceLocation.tryParse("elderclient:$safeName") ?: return null
+                Minecraft.getInstance().textureManager.register(id, dyn)
+                previewCache[path] = id
+                return id
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            return null
+        }
+    }
+    fun loadCapeFromFile(pathorginal: String) {
+        val path = pathorginal + "png"
+        try {
+            val file = File(path)
+            if (!file.exists()) return
+
+            FileInputStream(file).use { fis ->
+                val img = NativeImage.read(fis) ?: return
+                val dyn = DynamicTexture(img)
+                val id = ResourceLocation.tryParse("elderclient:cape")
+                if (id != null) {
+                    Minecraft.getInstance().textureManager.register(id, dyn)
+                }
+                capeFilePath = path
+                capeLoaded = true
+                capeTextureLocation = id
+                dynamicTexture = dyn
+            }
+            try {
+                val player = Minecraft.getInstance().player
+                if (player != null) {
+                    val rlClass = ResourceLocation::class.java
+                    for (field in player::class.java.declaredFields) {
+                        try {
+                            if (field.type == rlClass) {
+                                field.isAccessible = true
+                                val name = field.name.lowercase()
+                                if (name.contains("cape") || name.contains("cloak") || name.contains("cloaktexture") || name.contains("cloak_texture")) {
+                                    field.set(player, capeTextureLocation)
+                                }
+                            }
+                            if (field.type == java.lang.Boolean.TYPE) {
+                                field.isAccessible = true
+                                val name = field.name.lowercase()
+                                if (name.contains("cape") || name.contains("cloak")) {
+                                    field.setBoolean(player, true)
+                                }
+                            }
+                        } catch (_: Throwable) {
+                        }
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+
+            println("Registered cape texture: $path -> ${capeTextureLocation}")
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    fun loadCapeFromSpec(spec: String) {
+        try {
+            val trimmed = spec.trim()
+            if (trimmed.isEmpty()) return
+            val isNumeric = trimmed.all { it.isDigit() }
+            if (isNumeric) {
+                val url = "https://skinmc.net/capes/$trimmed/download"
+                val dest = File(capesDir, "$trimmed.png")
+                if (downloadToFile(url, dest)) {
+                    loadCapeFromFile(dest.absolutePath)
+                }
+                return
+            }
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                val urlObj = URL(trimmed)
+                val pathSeg = urlObj.path.substringAfterLast('/').ifEmpty { "$${System.currentTimeMillis()}.png" }
+                val dest = File(capesDir, pathSeg)
+                if (downloadToFile(trimmed, dest)) {
+                    loadCapeFromFile(dest.absolutePath)
+                }
+                return
+            }
+            val local = File(trimmed)
+            if (local.exists()) {
+                loadCapeFromFile(local.absolutePath)
+            } else {
+                val rel = File(capesDir, trimmed)
+                if (rel.exists()) loadCapeFromFile(rel.absolutePath)
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun downloadToFile(urlStr: String, dest: File): Boolean {
+        try {
+            val url = URL(urlStr)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            conn.requestMethod = "GET"
+            conn.instanceFollowRedirects = true
+            conn.connect()
+
+            if (conn.responseCode != HttpURLConnection.HTTP_OK) {
+                conn.inputStream.close()
+                return false
+            }
+            dest.parentFile?.let { if (!it.exists()) it.mkdirs() }
+
+            conn.inputStream.use { input ->
+                FileOutputStream(dest).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            return true
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            return false
+        }
+    }
+}
