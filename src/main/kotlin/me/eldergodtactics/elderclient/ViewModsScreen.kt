@@ -11,22 +11,23 @@ class ViewModsScreen : Screen(Component.literal("View Mods")) {
 
     override fun init() {
         super.init()
-        // layout
-        val bw = 90
-        val bh = 20
-        val spacing = 6
-        var y = 10
+        val blockWidth = (280 * 0.3).toInt()
+        val blockHeight = (200 * 0.3).toInt()
+        val spacing = 10
+        var x = 10
+        var y = 40
 
         val client = this.minecraft
         val mods = client?.let { ModsManager.listMods(it) } ?: emptyList()
 
         for (file in mods) {
-            val name = file.name
             val enabled = client?.let { ModsManager.isEnabled(it, file) } ?: true
-            // name label (as a button for easier visual)
+            val nameHeight = (blockHeight * 0.75).toInt()
+            val toggleHeight = blockHeight - nameHeight
+
             addRenderableWidget(
-                Button.builder(Component.literal(name)) { _ -> }
-                    .bounds(10, y, width - (bw + 30), bh)
+                Button.builder(Component.literal(file.name)) { _ -> }
+                    .bounds(x, y, blockWidth, nameHeight)
                     .build()
             )
 
@@ -37,33 +38,31 @@ class ViewModsScreen : Screen(Component.literal("View Mods")) {
                         val c = this.minecraft ?: return@builder
                         val ok = ModsManager.toggleMod(c, file)
                         statusMessage = if (ok) "${file.name} toggled. Restarting to apply changes..." else "Failed to toggle ${file.name}"
-                        // schedule exit so the launcher can be used to restart (delayed to let UI update)
                         Thread {
                             try { Thread.sleep(600) } catch (_: InterruptedException) {}
-                            // best-effort terminate the game so the launcher becomes visible
                             try { System.exit(if (ok) 0 else 1) } catch (_: Throwable) {}
                         }.start()
                     } catch (e: Exception) {
                         e.printStackTrace()
                         statusMessage = "Error: ${e.message}"
                     }
-                }
-                    .bounds(width - (bw + 10), y, bw, bh)
-                    .build()
+                }.bounds(x, y + nameHeight, blockWidth, toggleHeight).build()
             )
 
-            y += bh + spacing
-            // if we run out of vertical space, stop adding more widgets
-            if (y > height - 50) break
+            x += blockWidth + spacing
+            if (x + blockWidth > this.width) {
+                x = 10
+                y += blockHeight + spacing
+            }
         }
 
-        // close button
         addRenderableWidget(
             Button.builder(Component.literal("Close (R)")) { _ ->
                 minecraft?.setScreen(OverlayScreen())
             }.bounds(10, height - 30, 80, 20).build()
         )
     }
+
 
     override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
         guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
