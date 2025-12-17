@@ -1,5 +1,6 @@
 package me.eldergodtactics.elderclient
 
+import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.EditBox
@@ -14,6 +15,13 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
     private var capeFiles: List<File> = emptyList()
     private var scrollOffset = 0
     private var selectedIndex = -1
+
+    private val capeChangedListener: (String?) -> Unit = {
+        Minecraft.getInstance().execute {
+            refreshList()
+        }
+    }
+
     override fun init() {
         super.init()
         val bw = 120
@@ -43,6 +51,7 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
             }.bounds(x + totalW + 6, y, 80, bh).build()
         )
         refreshList()
+        CapeManager.addOnCapeChangedListener(capeChangedListener)
     }
 
     private fun refreshList() {
@@ -51,7 +60,6 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
     }
 
     override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
-        guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
         guiGraphics.drawCenteredString(font, "Cape Editor - customize your cape", width / 2, 10, 0xFFFFFF)
         val listX = 20
         val listY = 40
@@ -117,6 +125,9 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
         super.render(guiGraphics, mouseX, mouseY, partialTicks)
     }
 
+    override fun renderBackground(guiGraphics: GuiGraphics, i: Int, j: Int, f: Float) {
+    }
+
     override fun mouseClicked(mouseX: Double, mouseY: Double, button: Int): Boolean {
         val mx = mouseX.toInt()
         val my = mouseY.toInt()
@@ -176,5 +187,13 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
             return true
         }
         return super.keyPressed(i, j, k)
+    }
+
+    override fun onClose() {
+        try {
+            CapeManager.removeOnCapeChangedListener(capeChangedListener)
+        } catch (_: Throwable) {
+        }
+        super.onClose()
     }
 }
