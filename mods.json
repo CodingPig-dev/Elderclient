@@ -8,6 +8,11 @@
     "name": "Iris",
     "url": "https://cdn.modrinth.com/data/YL57xq9U/versions/Ca054sTe/iris-fabric-1.8.8%2Bmc1.21.4.jar",
     "license": "LGPL-3.0, made by @coderbot and @IMS"
-  }
+  },
+ { 
+   "name": "ReplayMod", 
+   "url": "", 
+   "license": "GPL-3.0, made by @Johni0702"
+ }
 ]
 
