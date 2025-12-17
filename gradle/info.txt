@@ -1,0 +1,1 @@
+gradle 9.2.1 (from fabric template 1.21.4)
