@@ -8,7 +8,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ConcurrentHashMap
 
 object CapeManager {
@@ -24,7 +25,27 @@ object CapeManager {
     @Volatile
     var dynamicTexture: DynamicTexture? = null
     private val capesDir: File = File(System.getProperty("user.home"), "Eldercapes")
+    private val currentFile: File = File(capesDir, "current.txt")
     private val previewCache: MutableMap<String, ResourceLocation> = ConcurrentHashMap()
+
+    private val listeners: CopyOnWriteArrayList<(String?) -> Unit> = CopyOnWriteArrayList()
+
+    fun addOnCapeChangedListener(listener: (String?) -> Unit) {
+        listeners.add(listener)
+    }
+
+    fun removeOnCapeChangedListener(listener: (String?) -> Unit) {
+        listeners.remove(listener)
+    }
+
+    private fun notifyCapeChanged(path: String?) {
+        for (l in listeners) {
+            try {
+                l(path)
+            } catch (_: Throwable) {
+            }
+        }
+    }
 
     init {
         if (!capesDir.exists()) {
@@ -32,6 +53,39 @@ object CapeManager {
                 capesDir.mkdirs()
             } catch (_: Throwable) {
             }
+        }
+        try {
+            val saved = readCurrentFile()
+            if (!saved.isNullOrEmpty()) {
+                try {
+                    loadCapeFromFile(saved)
+                } catch (_: Throwable) {
+                }
+            }
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun readCurrentFile(): String? {
+        try {
+            if (!currentFile.exists()) return null
+            return currentFile.readText().trim().ifEmpty { null }
+        } catch (_: Throwable) {
+            return null
+        }
+    }
+
+    private fun writeCurrentFile(path: String?) {
+        try {
+            if (path == null) {
+                if (currentFile.exists()) currentFile.delete()
+                return
+            }
+            currentFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            FileOutputStream(currentFile).use { fos ->
+                fos.write(path.toByteArray())
+            }
+        } catch (_: Throwable) {
         }
     }
 
@@ -66,24 +120,40 @@ object CapeManager {
             return null
         }
     }
-    fun loadCapeFromFile(pathorginal: String) {
-        val path = pathorginal + "png"
+    fun loadCapeFromFile(pathOriginal: String) {
         try {
+            val path = pathOriginal
             val file = File(path)
-            if (!file.exists()) return
+            val resolvedFile = if (file.exists()) {
+                file
+            } else {
+                val png = File(path + ".png")
+                val jpg = File(path + ".jpg")
+                val jpeg = File(path + ".jpeg")
+                when {
+                    png.exists() -> png
+                    jpg.exists() -> jpg
+                    jpeg.exists() -> jpeg
+                    else -> file
+                }
+            }
 
-            FileInputStream(file).use { fis ->
+            if (!resolvedFile.exists()) return
+
+            FileInputStream(resolvedFile).use { fis ->
                 val img = NativeImage.read(fis) ?: return
                 val dyn = DynamicTexture(img)
-                val id = ResourceLocation.tryParse("elderclient:cape")
+                val safeName = "cape_${resolvedFile.name.hashCode().toString().replace('-', 'n')}"
+                val id = ResourceLocation.tryParse("elderclient:$safeName")
                 if (id != null) {
                     Minecraft.getInstance().textureManager.register(id, dyn)
                 }
-                capeFilePath = path
+                capeFilePath = resolvedFile.absolutePath
                 capeLoaded = true
                 capeTextureLocation = id
                 dynamicTexture = dyn
             }
+
             try {
                 val player = Minecraft.getInstance().player
                 if (player != null) {
@@ -111,7 +181,19 @@ object CapeManager {
             } catch (_: Throwable) {
             }
 
-            println("Registered cape texture: $path -> ${capeTextureLocation}")
+            println("Registered cape texture: ${capeFilePath} -> ${capeTextureLocation}")
+
+            notifyCapeChanged(capeFilePath)
+
+            try {
+                writeCurrentFile(capeFilePath)
+            } catch (_: Throwable) {
+            }
+
+            try {
+                CapeFeatureRenderer.applyNow()
+            } catch (_: Throwable) {
+            }
         } catch (e: Throwable) {
             e.printStackTrace()
         }
@@ -131,8 +213,8 @@ object CapeManager {
                 return
             }
             if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-                val urlObj = URL(trimmed)
-                val pathSeg = urlObj.path.substringAfterLast('/').ifEmpty { "$${System.currentTimeMillis()}.png" }
+                val urlObj = URI(trimmed).toURL()
+                val pathSeg = urlObj.path.substringAfterLast('/').ifEmpty { "${System.currentTimeMillis()}.png" }
                 val dest = File(capesDir, pathSeg)
                 if (downloadToFile(trimmed, dest)) {
                     loadCapeFromFile(dest.absolutePath)
@@ -153,7 +235,7 @@ object CapeManager {
 
     private fun downloadToFile(urlStr: String, dest: File): Boolean {
         try {
-            val url = URL(urlStr)
+            val url = URI(urlStr).toURL()
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 10_000
             conn.readTimeout = 10_000
