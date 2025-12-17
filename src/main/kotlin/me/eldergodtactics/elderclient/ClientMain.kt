@@ -44,7 +44,11 @@ object ClientMain : ClientModInitializer {
         }
 
         TitleScreenManager.register()
-        // Try to apply the first resource pack from the game's resourcepacks folder at startup
+        try {
+            CapeFeatureRenderer.register()
+        } catch (_: Throwable) {
+        }
+
         try {
             ResourcePackUtil.applyDarkModePack(Minecraft.getInstance())
         } catch (_: Throwable) {
