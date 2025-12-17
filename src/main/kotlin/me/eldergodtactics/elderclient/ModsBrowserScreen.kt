@@ -2,6 +2,7 @@ package me.eldergodtactics.elderclient
 
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.Button
+import net.minecraft.client.gui.screens.ConfirmScreen
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import org.lwjgl.glfw.GLFW
@@ -9,58 +10,37 @@ import java.awt.Desktop
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
 import java.net.URI
-import java.net.URL
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import kotlin.concurrent.thread
 
 class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
     private var statusMessage: String? = null
     private val results = mutableListOf<SearchResult>()
     private var isLoading = false
+    private val httpClient: HttpClient = HttpClient.newBuilder()
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .connectTimeout(Duration.ofSeconds(10))
+        .build()
 
     data class SearchResult(val title: String, val slug: String, val url: String)
 
     override fun init() {
         super.init()
-        val browserUrl = "https://www.curseforge.com/minecraft/search?page=1&pageSize=20&sortBy=relevancy&version=1.21.4&gameVersionTypeId=4"
         addRenderableWidget(
-            Button.builder(Component.literal("Open in Browser")) { _ ->
-                try {
-                    if (Desktop.isDesktopSupported()) {
-                        Desktop.getDesktop().browse(URI(browserUrl))
-                        statusMessage = "Opened browser: $browserUrl"
-                    } else {
-                        statusMessage = "Desktop browse not supported on this platform."
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    statusMessage = "Failed to open browser: ${e.message}"
-                }
-            }.bounds(10, 10, 140, 20).build()
+            Button.builder(Component.literal("Available Mods")) { _ -> }
+                .bounds(10, 10, 140, 20).build()
         )
-
         addRenderableWidget(
-            Button.builder(Component.literal("Preview (text)")) { _ ->
-                statusMessage = "Fetching preview..."
-                thread {
-                    try {
-                        val html = tryFetchHtml(browserUrl)
-                        statusMessage = if (html.length > 1000) html.substring(0, 1000) + "... (truncated)" else html
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        statusMessage = "Preview failed: ${e.message}"
-                    }
-                }
-            }.bounds(160, 10, 120, 20).build()
+            Button.builder(Component.literal("After downloading please restart")) { _ -> }
+                .bounds(160, 10, 240, 20).build()
         )
         if (results.isEmpty()) {
             val remoteUrl = "https://etme-tech.me/Elderclient/mods.json"
-            val loaded = try {
-                loadRemoteModsList(remoteUrl)
-            } catch (_: Throwable) {
-                false
-            }
+            val loaded = try { loadRemoteModsList(remoteUrl) } catch (_: Throwable) { false }
             if (loaded) {
                 statusMessage = "Loaded ${results.size} mods from remote list"
             } else {
@@ -90,37 +70,58 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
             }
         }
 
-        val bw = 90
-        val bh = 20
-        val spacing = 6
+        val blockWidth = (280 * 0.3).toInt()
+        val blockHeight = (200 * 0.3).toInt()
+        val spacing = 10
+        var x = 10
         var y = 40
 
         for (res in results) {
+            val nameHeight = (blockHeight * 0.75).toInt()
+            val downloadHeight = blockHeight - nameHeight
             addRenderableWidget(
                 Button.builder(Component.literal(res.title)) { _ -> }
-                    .bounds(10, y, width - (bw + 30), bh)
+                    .bounds(x, y, blockWidth, nameHeight)
                     .build()
             )
-
             addRenderableWidget(
                 Button.builder(Component.literal("Download")) { _ ->
                     statusMessage = "Starting download: ${res.title}"
                     thread {
                         try {
                             val ok = downloadProjectLatest(res.url)
-                            statusMessage = if (ok) "Downloaded ${res.title} to mods folder. Restart to load." else "Download failed for ${res.title}"
+                            if (ok) {
+                                minecraft?.execute {
+                                    minecraft?.setScreen(
+                                        ConfirmScreen(
+                                            { yes ->
+                                                if (yes) {
+                                                    minecraft?.stop()
+                                                } else {
+                                                    statusMessage = "Restart cancelled"
+                                                    minecraft?.setScreen(this@ModsBrowserScreen)
+                                                }
+                                            },
+                                            Component.literal("Restart required"),
+                                            Component.literal("Do you want to restart the game now?")
+                                        )
+                                    )
+                                }
+                            } else {
+                                statusMessage = "Download failed for ${res.title}"
+                            }
                         } catch (e: Exception) {
                             e.printStackTrace()
                             statusMessage = "Error: ${e.message}"
                         }
                     }
-                }
-                    .bounds(width - (bw + 10), y, bw, bh)
-                    .build()
+                }.bounds(x, y + nameHeight, blockWidth, downloadHeight).build()
             )
-
-            y += bh + spacing
-            if (y > height - 40) break
+            x += blockWidth + spacing
+            if (x + blockWidth > this.width) {
+                x = 10
+                y += blockHeight + spacing
+            }
         }
 
         addRenderableWidget(
@@ -129,6 +130,8 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
             }.bounds(10, height - 30, 80, 20).build()
         )
     }
+
+
 
     override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
         guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
@@ -150,19 +153,18 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
     private fun fetchSearchResults() {
         val url = "https://www.curseforge.com/minecraft/search?page=1&pageSize=20&sortBy=relevancy&version=1.21.4&gameVersionTypeId=4"
         try {
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-            conn.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-            conn.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-            conn.setRequestProperty("Referer", "https://www.curseforge.com/")
-            conn.setRequestProperty("Connection", "keep-alive")
-            conn.setRequestProperty("Upgrade-Insecure-Requests", "1")
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
+            val req = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .timeout(Duration.ofSeconds(15))
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Referer", "https://www.curseforge.com/")
+                .GET()
+                .build()
 
-            val code = try { conn.responseCode } catch (_: Throwable) { -1 }
-            if (code == 403) {
+            val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
+            if (resp.statusCode() == 403) {
                 val key = readApiKey()
                 if (key != null) {
                     fetchViaApi(key)
@@ -170,11 +172,7 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                 }
                 throw java.io.IOException("Server returned HTTP 403. CurseForge blocks direct scraping; provide an API key via CURSEFORGE_API_KEY env or run/curseforge_key.txt to use the CurseForge API as a fallback.")
             }
-
-            conn.inputStream.bufferedReader().use { reader ->
-                val html = reader.readText()
-                parseSearchHtml(html)
-            }
+            parseSearchHtml(resp.body())
         } catch (e: java.io.IOException) {
             val key = readApiKey()
             if (key != null) {
@@ -203,21 +201,20 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
         } catch (_: Throwable) { }
         return null
     }
-
     private fun fetchViaApi(apiKey: String) {
         val q = "https://api.curseforge.com/v1/mods/search?gameId=432&gameVersion=1.21.4&pageSize=20"
-        val conn = URL(q).openConnection() as HttpURLConnection
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "ElderClient/1.0")
-        conn.setRequestProperty("Accept", "application/json")
-        conn.setRequestProperty("x-api-key", apiKey)
-        conn.connectTimeout = 15_000
-        conn.readTimeout = 15_000
-        conn.connect()
-        val code = conn.responseCode
-        if (code != 200) throw java.io.IOException("CurseForge API returned HTTP $code")
-        val json = conn.inputStream.bufferedReader().use { it.readText() }
-        parseApiJson(json)
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create(q))
+            .timeout(Duration.ofSeconds(15))
+            .header("User-Agent", "ElderClient/1.0")
+            .header("Accept", "application/json")
+            .header("x-api-key", apiKey)
+            .GET()
+            .build()
+
+        val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
+        if (resp.statusCode() != 200) throw java.io.IOException("CurseForge API returned HTTP ${resp.statusCode()}")
+        parseApiJson(resp.body())
     }
 
     private fun parseApiJson(json: String) {
@@ -261,25 +258,27 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                 "https://www.curseforge.com/minecraft/mc-mods/$urlOrSlug/download"
             }
 
-            val conn = URL(directUrl).openConnection() as HttpURLConnection
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 60_000
-            conn.connect()
+            val req = HttpRequest.newBuilder()
+                .uri(URI.create(directUrl))
+                .timeout(Duration.ofSeconds(60))
+                .header("User-Agent", "Mozilla/5.0")
+                .GET()
+                .build()
 
-            val finalUrl = conn.url.toString()
+            val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream())
+            if (resp.statusCode() !in 200..299) throw java.io.IOException("Download returned HTTP ${resp.statusCode()}")
 
-            val cd = conn.getHeaderField("Content-Disposition")
+            val finalUri = resp.uri()
+            val cd = resp.headers().firstValue("content-disposition").orElse(null)
             val fileName = when {
                 cd != null && cd.contains("filename=") -> cd.substringAfter("filename=").trim('"')
                 else -> {
-                    val path = URL(finalUrl).path
+                    val path = finalUri.path
                     path.substringAfterLast('/').takeIf { it.isNotBlank() } ?: "downloaded-mod.jar"
                 }
             }
 
-            BufferedInputStream(URL(finalUrl).openStream()).use { input ->
+            BufferedInputStream(resp.body()).use { input ->
                 val modsDir = ModsManager.modsDir(client)
                 if (!modsDir.exists()) modsDir.mkdirs()
                 val outFile = File(modsDir, fileName)
@@ -302,32 +301,33 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
     }
 
     private fun tryFetchHtml(urlStr: String): String {
-        val conn = URL(urlStr).openConnection() as HttpURLConnection
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-        conn.setRequestProperty("Accept", "text/html")
-        conn.setRequestProperty("Referer", "https://www.curseforge.com/")
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 10_000
-        val code = try { conn.responseCode } catch (_: Throwable) { -1 }
-        if (code == 403) throw java.io.IOException("HTTP 403: access denied by server (embedding/scraping blocked)")
-        return conn.inputStream.bufferedReader().use { it.readText() }
+        val req = HttpRequest.newBuilder()
+            .uri(URI.create(urlStr))
+            .timeout(Duration.ofSeconds(10))
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+            .header("Accept", "text/html")
+            .header("Referer", "https://www.curseforge.com/")
+            .GET()
+            .build()
+        val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
+        if (resp.statusCode() == 403) throw java.io.IOException("HTTP 403: access denied by server (embedding/scraping blocked)")
+        return resp.body()
     }
 
     private fun loadRemoteModsList(remoteUrl: String): Boolean {
         try {
             try {
-                val conn = URL(remoteUrl).openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = true
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                conn.connectTimeout = 10_000
-                conn.readTimeout = 10_000
-                val code = try { conn.responseCode } catch (_: Throwable) { -1 }
-                if (code == 200) {
-                    val text = conn.inputStream.bufferedReader().use { it.readText() }
-                    return parseModsJsonText(text)
+                val req = HttpRequest.newBuilder()
+                    .uri(URI.create(remoteUrl))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("User-Agent", "Mozilla/5.0")
+                    .GET()
+                    .build()
+                val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
+                if (resp.statusCode() == 200) {
+                    return parseModsJsonText(resp.body())
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
             }
 
             return loadLocalModsList()
