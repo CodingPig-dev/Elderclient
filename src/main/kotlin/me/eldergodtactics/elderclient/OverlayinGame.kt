@@ -55,35 +55,4 @@ class OverlayScreen : Screen(net.minecraft.network.chat.Component.literal("Elder
     }
 }
 
-class ModsBrowserScreen : Screen(net.minecraft.network.chat.Component.literal("Mods Browser")) {
-    override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
-        guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
-        guiGraphics.drawCenteredString(font, "Mods Browser - work in progress", width / 2, height / 2 - 10, 0xFFFFFF)
-        super.render(guiGraphics, mouseX, mouseY, partialTicks)
-    }
-
-    override fun keyPressed(i: Int, j: Int, k: Int): Boolean {
-        if (i == GLFW.GLFW_KEY_R) {
-            minecraft?.setScreen(OverlayScreen())
-            return true
-        }
-        return super.keyPressed(i, j, k)
-    }
-}
-
-class ViewModsScreen : Screen(net.minecraft.network.chat.Component.literal("View Mods")) {
-    override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
-        guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
-        guiGraphics.drawCenteredString(font, "Installed mods will be listed here", width / 2, height / 2 - 10, 0xFFFFFF)
-        super.render(guiGraphics, mouseX, mouseY, partialTicks)
-    }
-
-    override fun keyPressed(i: Int, j: Int, k: Int): Boolean {
-        if (i == GLFW.GLFW_KEY_R) {
-            minecraft?.setScreen(OverlayScreen())
-            return true
-        }
-        return super.keyPressed(i, j, k)
-    }
-}
 
