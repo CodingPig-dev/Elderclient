@@ -26,10 +26,11 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
         super.init()
         val bw = 120
         val bh = 20
-        val totalW = 300
+        val topY = 20
+        val totalW = 480
         val x = (width - totalW) / 2
-        val y = (height / 2) - 20
-        pathBox = EditBox(font, x, y, totalW, bh, Component.literal("Path or ID (e.g. C:/Capes/1.png or 127487)"))
+        val y = topY
+        pathBox = EditBox(font, x, y, totalW - 220, bh, Component.literal("Path or ID (e.g. C:/Capes/1.png or 127487)"))
         addRenderableWidget(pathBox)
         addRenderableWidget(
             Button.builder(Component.literal("Load Cape")) { _ ->
@@ -43,12 +44,12 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
                 } catch (e: Throwable) {
                     e.printStackTrace()
                 }
-            }.bounds(x + (totalW - bw) / 2, y + bh + 8, bw, bh).build()
+            }.bounds(x + (totalW - 220) + 8, y, bw, bh).build()
         )
         addRenderableWidget(
             Button.builder(Component.literal("Refresh")) { _ ->
                 refreshList()
-            }.bounds(x + totalW + 6, y, 80, bh).build()
+            }.bounds(x + (totalW - 220) + 8 + bw + 8, y, 80, bh).build()
         )
         refreshList()
         CapeManager.addOnCapeChangedListener(capeChangedListener)
@@ -60,63 +61,82 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
     }
 
     override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
-        guiGraphics.drawCenteredString(font, "Cape Editor - customize your cape", width / 2, 10, 0xFFFFFF)
+        guiGraphics.drawCenteredString(font, "Cape Editor - customize your cape", width / 2, 8, 0xFFFFFF)
+        val topY = 20
+        val bh = 20
         val listX = 20
-        val listY = 40
-        val listW = 260
+        val listY = topY + bh + 12
+        val listW = 320
         val listH = height - listY - 20
-        val itemH = 24
-        guiGraphics.fill(listX - 2, listY - 2, listX + listW + 2, listY + listH + 2, 0xFF222222.toInt())
-        val visibleCount = listH / itemH
-        val start = scrollOffset
+        val itemH = 40
+        guiGraphics.fill(listX - 2, listY - 2, listX + listW + 2, listY + listH + 2, 0xFF1F1F1F.toInt())
+        val visibleCount = (listH / itemH).coerceAtLeast(1)
+        val start = scrollOffset.coerceAtLeast(0)
         val end = (start + visibleCount).coerceAtMost(capeFiles.size)
-
         for (i in start until end) {
             val itemY = listY + (i - start) * itemH
             val file = capeFiles[i]
             if (i == selectedIndex) {
-                guiGraphics.fill(listX, itemY, listX + listW, itemY + itemH - 1, 0xFF4444AA.toInt())
+                guiGraphics.fill(listX, itemY, listX + listW, itemY + itemH - 1, 0xFF33447A.toInt())
             } else if (mouseX in listX..(listX + listW) && mouseY in itemY..(itemY + itemH - 1)) {
-                guiGraphics.fill(listX, itemY, listX + listW, itemY + itemH - 1, 0xFF333333.toInt())
+                guiGraphics.fill(listX, itemY, listX + listW, itemY + itemH - 1, 0xFF2A2A2A.toInt())
             }
             try {
-                val preview = CapeManager.getPreviewLocationForPath(file.absolutePath)
-                if (preview != null) {
-                    val thumbW = 48
-                    val thumbH = 24
+                val info = CapeManager.getPreviewInfo(file.absolutePath)
+                val thumbW = 56
+                val thumbH = 32
+                val thumbX = listX + 6
+                val thumbY = itemY + (itemH - thumbH) / 2
+                guiGraphics.fill(thumbX - 1, thumbY - 1, thumbX + thumbW + 1, thumbY + thumbH + 1, 0xFF101010.toInt())
+                if (info != null) {
                     val rtFunc = java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> { _ -> net.minecraft.client.renderer.RenderType.gui() }
-                    guiGraphics.blit(rtFunc, preview, listX + 4, itemY + 1, 0f, 0f, thumbW, thumbH, thumbW, thumbH)
-                    guiGraphics.drawString(font, file.name, listX + 8 + thumbW, itemY + 6, 0xFFFFFF)
+                    val scale = kotlin.math.min(thumbW.toFloat() / info.width.toFloat(), thumbH.toFloat() / info.height.toFloat())
+                    val drawW = (info.width * scale).toInt().coerceAtLeast(1)
+                    val drawH = (info.height * scale).toInt().coerceAtLeast(1)
+                    val drawX = thumbX + (thumbW - drawW) / 2
+                    val drawY = thumbY + (thumbH - drawH) / 2
+                    guiGraphics.blit(rtFunc, info.location, drawX, drawY, 0f, 0f, drawW, drawH, info.width, info.height)
+                    val textX = listX + 8 + thumbW
+                    val textY = itemY + (itemH - font.lineHeight) / 2
+                    guiGraphics.drawString(font, file.name, textX, textY, 0xFFFFFF)
                 } else {
-                    guiGraphics.drawString(font, file.name, listX + 8, itemY + 6, 0xFFFFFF)
+                    val textY = itemY + (itemH - font.lineHeight) / 2
+                    guiGraphics.drawString(font, file.name, listX + 8, textY, 0xFFFFFF)
                 }
             } catch (_: Throwable) {
-                guiGraphics.drawString(font, file.name, listX + 8, itemY + 6, 0xFFFFFF)
+                val textY = itemY + (itemH - font.lineHeight) / 2
+                guiGraphics.drawString(font, file.name, listX + 8, textY, 0xFFFFFF)
             }
         }
         val previewX = listX + listW + 20
         val previewY = listY
-        val previewW = 240
-        val previewH = 240
-        guiGraphics.fill(previewX - 2, previewY - 2, previewX + previewW + 2, previewY + previewH + 2, 0xFF222222.toInt())
+        val previewW = (width - previewX - 20).coerceAtLeast(200)
+        val previewH = previewW.coerceAtMost(360)
+        guiGraphics.fill(previewX - 2, previewY - 2, previewX + previewW + 2, previewY + previewH + 2, 0xFF1F1F1F.toInt())
 
         if (selectedIndex in capeFiles.indices) {
             val selectedFile = capeFiles[selectedIndex]
-            val rl = CapeManager.getPreviewLocationForPath(selectedFile.absolutePath)
-            if (rl != null) {
+            val info = CapeManager.getPreviewInfo(selectedFile.absolutePath)
+            guiGraphics.fill(previewX, previewY, previewX + previewW, previewY + previewH, 0xFF0F0F0F.toInt())
+            if (info != null) {
                 try {
                     val rtFunc = java.util.function.Function<ResourceLocation, net.minecraft.client.renderer.RenderType> { _ -> net.minecraft.client.renderer.RenderType.gui() }
-                    guiGraphics.blit(rtFunc, rl, previewX, previewY, 0f, 0f, previewW, previewH, previewW, previewH)
+                    val scale = kotlin.math.min(previewW.toFloat() / info.width.toFloat(), previewH.toFloat() / info.height.toFloat())
+                    val drawW = (info.width * scale).toInt().coerceAtLeast(1)
+                    val drawH = (info.height * scale).toInt().coerceAtLeast(1)
+                    val drawX = previewX + (previewW - drawW) / 2
+                    val drawY = previewY + (previewH - drawH) / 2
+                    guiGraphics.blit(rtFunc, info.location, drawX, drawY, 0f, 0f, drawW, drawH, info.width, info.height)
                 } catch (_: Throwable) {
-                    guiGraphics.drawCenteredString(font, "Preview unavailable", previewX + previewW / 2, previewY + previewH / 2, 0xFFFFFF)
+                    guiGraphics.drawCenteredString(font, "Preview unavailable", previewX + previewW / 2, previewY + previewH / 2 - font.lineHeight / 2, 0xFFFFFF)
                 }
             } else {
-                guiGraphics.drawCenteredString(font, "No preview", previewX + previewW / 2, previewY + previewH / 2, 0xFFFFFF)
+                guiGraphics.drawCenteredString(font, "No preview", previewX + previewW / 2, previewY + previewH / 2 - font.lineHeight / 2, 0xFFFFFF)
             }
 
             guiGraphics.drawString(font, "Selected: ${capeFiles[selectedIndex].name}", previewX, previewY + previewH + 6, 0xFFFFFF)
         } else {
-            guiGraphics.drawCenteredString(font, "No cape selected", previewX + previewW / 2, previewY + previewH / 2, 0xFFFFFF)
+            guiGraphics.drawCenteredString(font, "No cape selected", previewX + previewW / 2, previewY + previewH / 2 - font.lineHeight / 2, 0xFFFFFF)
         }
         if (CapeManager.capeLoaded) {
             guiGraphics.drawString(font, "Loaded: ${File(CapeManager.capeFilePath).name}", previewX, previewY + previewH + 22, 0xFFFFFF)
@@ -131,10 +151,12 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
     override fun mouseClicked(mouseX: Double, mouseY: Double, button: Int): Boolean {
         val mx = mouseX.toInt()
         val my = mouseY.toInt()
+        val topY = 20
+        val bh = 20
         val listX = 20
-        val listY = 40
-        val listW = 260
-        val itemH = 24
+        val listY = topY + bh + 12
+        val listW = 320
+        val itemH = 40
         val visibleCount = (height - listY - 20) / itemH
         val start = scrollOffset
         val end = (start + visibleCount).coerceAtMost(capeFiles.size)
@@ -161,7 +183,12 @@ class CapeEditorScreen : Screen(Component.literal("Cape Editor")) {
     override fun mouseScrolled(d0: Double, d1: Double, deltaX: Double, deltaY: Double): Boolean {
         val amount = deltaY.toInt()
         scrollOffset = (scrollOffset - amount).coerceAtLeast(0)
-        val maxStart = (capeFiles.size - ((height - 40 - 20) / 24)).coerceAtLeast(0)
+        val topY = 20
+        val bh = 20
+        val listY = topY + bh + 12
+        val listH = height - listY - 20
+        val itemH = 40
+        val maxStart = (capeFiles.size - (listH / itemH)).coerceAtLeast(0)
         if (scrollOffset > maxStart) scrollOffset = maxStart
         return true
     }
