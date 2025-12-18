@@ -20,6 +20,7 @@ object CapeManager {
     var capeLoaded: Boolean = false
 
     @Volatile
+    @JvmField
     var capeTextureLocation: ResourceLocation? = null
 
     @Volatile
