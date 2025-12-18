@@ -27,9 +27,11 @@ object CapeManager {
     var dynamicTexture: DynamicTexture? = null
     private val capesDir: File = File(System.getProperty("user.home"), "Eldercapes")
     private val currentFile: File = File(capesDir, "current.txt")
-    private val previewCache: MutableMap<String, ResourceLocation> = ConcurrentHashMap()
+    private val previewCache: MutableMap<String, PreviewInfo> = ConcurrentHashMap()
 
     private val listeners: CopyOnWriteArrayList<(String?) -> Unit> = CopyOnWriteArrayList()
+
+    data class PreviewInfo(val location: ResourceLocation, val width: Int, val height: Int, val texture: DynamicTexture)
 
     fun addOnCapeChangedListener(listener: (String?) -> Unit) {
         listeners.add(listener)
@@ -100,7 +102,7 @@ object CapeManager {
         }
     }
 
-    fun getPreviewLocationForPath(path: String): ResourceLocation? {
+    fun getPreviewInfo(path: String): PreviewInfo? {
         try {
             val file = File(path)
             if (!file.exists()) return null
@@ -109,18 +111,31 @@ object CapeManager {
 
             FileInputStream(file).use { fis ->
                 val img = NativeImage.read(fis) ?: return null
+                val w = img.width
+                val h = img.height
                 val dyn = DynamicTexture(img)
                 val safeName = "preview_${path.hashCode().toString().replace('-', 'n')}"
                 val id = ResourceLocation.tryParse("elderclient:$safeName") ?: return null
                 Minecraft.getInstance().textureManager.register(id, dyn)
-                previewCache[path] = id
-                return id
+                val info = PreviewInfo(id, w, h, dyn)
+                previewCache[path] = info
+                return info
             }
         } catch (e: Throwable) {
             e.printStackTrace()
             return null
         }
     }
+
+    // backward-compatible helper
+    fun getPreviewLocationForPath(path: String): ResourceLocation? {
+        return try {
+            getPreviewInfo(path)?.location
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun loadCapeFromFile(pathOriginal: String) {
         try {
             val path = pathOriginal
