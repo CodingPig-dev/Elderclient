@@ -35,7 +35,7 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                 .bounds(10, 10, 140, 20).build()
         )
         addRenderableWidget(
-            Button.builder(Component.literal("After downloading please restart")) { _ -> }
+            Button.builder(Component.literal("Mods are downloaded from Modrinth")) { _ -> }
                 .bounds(160, 10, 240, 20).build()
         )
         if (results.isEmpty()) {
@@ -85,7 +85,7 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                     .build()
             )
             addRenderableWidget(
-                Button.builder(Component.literal("Download (Modrinth)")) { _ ->
+                Button.builder(Component.literal("Download")) { _ ->
                     statusMessage = "Starting download: ${res.title}"
                     thread {
                         try {
