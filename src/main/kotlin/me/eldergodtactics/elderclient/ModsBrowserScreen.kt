@@ -85,7 +85,7 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                     .build()
             )
             addRenderableWidget(
-                Button.builder(Component.literal("Download")) { _ ->
+                Button.builder(Component.literal("Download (Modrinth)")) { _ ->
                     statusMessage = "Starting download: ${res.title}"
                     thread {
                         try {
