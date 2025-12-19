@@ -43,21 +43,19 @@ object ClientMain : ClientModInitializer {
                 }
             }
         }
-
-        // Replace the vanilla PauseScreen with our EscScreen when ESC is pressed in-game
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             try {
-                val screen = client.screen
-                if (screen is net.minecraft.client.gui.screens.PauseScreen && screen !is EscScreen) {
-                    if (!escOverlayDisabled) {
-                        client.setScreen(EscScreen())
-                    }
-                }
-                else if (screen !is net.minecraft.client.gui.screens.PauseScreen) {
-                    escOverlayDisabled = false
-                }
-            } catch (_: Throwable) {
-            }
+                 val screen = client.screen
+                 if (screen is net.minecraft.client.gui.screens.PauseScreen && screen !is EscScreen) {
+                     if (!escOverlayDisabled) {
+                         client.setScreen(EscScreen())
+                     }
+                 }
+                 else if (screen !is net.minecraft.client.gui.screens.PauseScreen) {
+                     escOverlayDisabled = false
+                 }
+             } catch (_: Throwable) {
+             }
         }
 
         TitleScreenManager.register()
