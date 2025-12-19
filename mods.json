@@ -33,6 +33,11 @@
    "name": "Entity Culling", 
    "url": "https://cdn.modrinth.com/data/NNAgCjsB/versions/wKJCglL7/entityculling-fabric-1.9.4-mc1.21.4.jar", 
    "license": "tr7zw Protective License, made by @tr7zw"
+ },
+   { 
+   "name": "3D Skin Layers", 
+   "url": "https://cdn.modrinth.com/data/zV5r3pPn/versions/WhfyeXHK/skinlayers3d-fabric-1.10.1-mc1.21.4.jar", 
+   "license": "tr7zw Protective License, made by @tr7zw"
  }
 ]
 
