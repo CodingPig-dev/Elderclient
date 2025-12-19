@@ -23,6 +23,11 @@
    "name": "Not enough Animations", 
    "url": "https://cdn.modrinth.com/data/MPCX6s5C/versions/2GPrEfDr/notenoughanimations-fabric-1.11.1-mc1.21.4.jar", 
    "license": "tr7zw Protective License, made by @tr7zw"
+ },
+  { 
+   "name": "Apple Skin", 
+   "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/cHQjeYVS/appleskin-fabric-mc1.21.3-3.0.6.jar", 
+   "license": "Unlicense, made by @squeek502"
  }
 ]
 
