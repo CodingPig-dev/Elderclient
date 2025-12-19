@@ -53,6 +53,11 @@
    "name": "Wavey Capes", 
    "url": "https://cdn.modrinth.com/data/kYuIpRLv/versions/oDyV6XDK/waveycapes-fabric-1.8.1-mc1.21.4.jar", 
    "license": "tr7zw Protective License, made by @tr7zw"
+ },
+  { 
+   "name": "MacroFactory", 
+   "url": "https://cdn.modrinth.com/data/It9txUIJ/versions/oSSv8wXK/macrofactory-1.2.3-1.21.3-1.21.4.jar", 
+   "license": "MIT, made by @__smok__"
  }
 ]
 
