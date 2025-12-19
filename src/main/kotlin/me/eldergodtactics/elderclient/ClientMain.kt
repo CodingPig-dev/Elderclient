@@ -17,6 +17,7 @@ object ClientMain : ClientModInitializer {
     private val logger = LoggerFactory.getLogger("elderclient")
     var menuOpen: Boolean = false
     var flyEnabled: Boolean = false
+    var escOverlayDisabled: Boolean = false
     private data class QueuedBlockAction(val pos: BlockPos, val isPlace: Boolean, val item: ItemStack?)
     private val queuedBlockActions: MutableList<QueuedBlockAction> = ArrayList()
     private val queuedMovements: MutableList<Vec3> = ArrayList()
@@ -40,6 +41,22 @@ object ClientMain : ClientModInitializer {
                 } else {
                     client.setScreen(null)
                 }
+            }
+        }
+
+        // Replace the vanilla PauseScreen with our EscScreen when ESC is pressed in-game
+        ClientTickEvents.END_CLIENT_TICK.register { client ->
+            try {
+                val screen = client.screen
+                if (screen is net.minecraft.client.gui.screens.PauseScreen && screen !is EscScreen) {
+                    if (!escOverlayDisabled) {
+                        client.setScreen(EscScreen())
+                    }
+                }
+                else if (screen !is net.minecraft.client.gui.screens.PauseScreen) {
+                    escOverlayDisabled = false
+                }
+            } catch (_: Throwable) {
             }
         }
 
