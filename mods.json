@@ -18,6 +18,11 @@
    "name": "ReplayMod", 
    "url": "https://cdn.modrinth.com/data/Nv2fQJo5/versions/Ax2S4lln/replaymod-1.21.4-2.6.23.jar", 
    "license": "GPL-3.0, made by @Johni0702"
+ },
+   { 
+   "name": "Not enough Animations", 
+   "url": "https://cdn.modrinth.com/data/MPCX6s5C/versions/2GPrEfDr/notenoughanimations-fabric-1.11.1-mc1.21.4.jar", 
+   "license": "tr7zw Protective License, made by @tr7zw"
  }
 ]
 
