@@ -2,6 +2,7 @@ package me.eldergodtactics.elderclient
 
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.gui.components.Button
+import net.minecraft.client.gui.components.EditBox
 import net.minecraft.client.gui.screens.ConfirmScreen
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
@@ -10,37 +11,79 @@ import java.awt.Desktop
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Timer
+import java.util.TimerTask
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.concurrent.thread
 
 class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
     private var statusMessage: String? = null
     private val results = mutableListOf<SearchResult>()
     private var isLoading = false
+    private var scrollOffset = 0f
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NORMAL)
         .connectTimeout(Duration.ofSeconds(10))
         .build()
 
+    private var searchText: String = ""
+    private var searchBox: EditBox? = null
+    private var searchTimer: Timer? = null
+    private var searchTimerTask: TimerTask? = null
+    private var searchHasFocus: Boolean = false
+    private val scrollStep = 20f
+
     data class SearchResult(val title: String, val slug: String, val url: String)
 
     override fun init() {
+        try { searchHasFocus = searchBox?.isFocused == true } catch (_: Throwable) { }
+        try { this.clearWidgets() } catch (_: Throwable) { }
         super.init()
+
         addRenderableWidget(
-            Button.builder(Component.literal("Available Mods")) { _ -> }
-                .bounds(10, 10, 140, 20).build()
+            Button.builder(Component.literal("Available Mods")) { _ ->
+            }.bounds(10, 10, 140, 20).build()
         )
         addRenderableWidget(
-            Button.builder(Component.literal("Mods are downloaded from Modrinth")) { _ -> }
-                .bounds(160, 10, 240, 20).build()
+            Button.builder(Component.literal("Mods are from Modrinth")) { _ ->
+                try {
+                    val url = "https://modrinth.com/"
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop.getDesktop().browse(URI.create(url))
+                    } else {
+                        try { ProcessBuilder("rundll32", "url.dll,FileProtocolHandler", url).start() } catch (_: Throwable) { }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }.bounds(160, 10, 150, 20).build()
         )
+
+        searchBox = EditBox(font, 310, 10, 150, 20, Component.literal("Search"))
+        searchBox?.setValue(searchText)
+        searchBox?.setResponder { newValue ->
+            searchText = newValue
+            try { searchHasFocus = searchBox?.isFocused == true } catch (_: Throwable) { }
+            searchTimerTask?.cancel()
+            if (searchTimer == null) searchTimer = Timer(true)
+            searchTimerTask = object : TimerTask() {
+                override fun run() {
+                    try { minecraft?.execute { this@ModsBrowserScreen.init() } } catch (_: Throwable) { }
+                }
+            }
+            searchTimer?.schedule(searchTimerTask, 250)
+        }
+        try { searchBox?.setFocused(searchHasFocus) } catch (_: Throwable) { }
+        searchBox?.let { addRenderableWidget(it) }
+
         if (results.isEmpty()) {
-            val remoteUrl = "https://etme-tech.me/Elderclient/mods.json"
-            val loaded = try { loadRemoteModsList(remoteUrl) } catch (_: Throwable) { false }
+            val loaded = try { loadRemoteModsList() } catch (_: Throwable) { false }
             if (loaded) {
                 statusMessage = "Loaded ${results.size} mods from remote list"
             } else {
@@ -73,10 +116,20 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
         val blockWidth = (280 * 0.3).toInt()
         val blockHeight = (200 * 0.3).toInt()
         val spacing = 10
+        val contentTop = 70
+        val filtered = if (searchText.isBlank()) results else results.filter {
+            it.title.contains(searchText, ignoreCase = true) || it.slug.contains(searchText, ignoreCase = true)
+        }
+        val columns = max(1, (this.width - 20) / (blockWidth + spacing))
+        val rows = (filtered.size + columns - 1) / columns
+        val contentHeight = rows * (blockHeight + spacing)
+        val visibleHeight = this.height - contentTop - 40
+        val maxScroll = max(0, contentHeight - visibleHeight).toFloat()
+        scrollOffset = min(maxScroll, max(0f, scrollOffset))
         var x = 10
-        var y = 40
+        var y = contentTop - scrollOffset.toInt()
 
-        for (res in results) {
+        for ((index, res) in filtered.withIndex()) {
             val nameHeight = (blockHeight * 0.75).toInt()
             val downloadHeight = blockHeight - nameHeight
             addRenderableWidget(
@@ -118,7 +171,7 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
                 }.bounds(x, y + nameHeight, blockWidth, downloadHeight).build()
             )
             x += blockWidth + spacing
-            if (x + blockWidth > this.width) {
+            if ((index + 1) % columns == 0) {
                 x = 10
                 y += blockHeight + spacing
             }
@@ -131,11 +184,8 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
         )
     }
 
-
-
     override fun render(guiGraphics: GuiGraphics, mouseX: Int, mouseY: Int, partialTicks: Float) {
         guiGraphics.fill(0, 0, width, height, 0xBB000000.toInt())
-        guiGraphics.drawCenteredString(font, "Mods Browser (CurseForge search)", width / 2, 6, 0xFFFFFF)
         statusMessage?.let {
             guiGraphics.drawCenteredString(font, it, width / 2, height - 18, 0xFFDD55)
         }
@@ -150,171 +200,40 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
         return super.keyPressed(i, j, k)
     }
 
+    override fun mouseClicked(mouseX: Double, mouseY: Double, button: Int): Boolean {
+        val handled = super.mouseClicked(mouseX, mouseY, button)
+        try { searchHasFocus = searchBox?.isFocused == true } catch (_: Throwable) { }
+        return handled
+    }
+
+    override fun mouseScrolled(mouseX: Double, mouseY: Double, deltaX: Double, deltaY: Double): Boolean {
+        val oldOffset = scrollOffset
+        scrollOffset -= (deltaY * scrollStep).toFloat()
+        if (scrollOffset != oldOffset) {
+            val contentTop = 70
+            val blockW = (280 * 0.3).toInt()
+            val blockH = (200 * 0.3).toInt()
+            val spacing = 10
+            val columns = max(1, (this.width - 20) / (blockW + spacing))
+            val rows = (results.size + columns - 1) / columns
+            val contentHeight = rows * (blockH + spacing)
+            val visibleHeight = this.height - contentTop - 40
+            val maxScroll = max(0, contentHeight - visibleHeight).toFloat()
+            scrollOffset = min(maxScroll, max(0f, scrollOffset))
+            try { minecraft?.execute { this@ModsBrowserScreen.init() } } catch (_: Throwable) { }
+        }
+        return true
+    }
+
     private fun fetchSearchResults() {
-        val url = "https://www.curseforge.com/minecraft/search?page=1&pageSize=20&sortBy=relevancy&version=1.21.4&gameVersionTypeId=4"
-        try {
-            val req = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(15))
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Referer", "https://www.curseforge.com/")
-                .GET()
-                .build()
-
-            val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
-            if (resp.statusCode() == 403) {
-                val key = readApiKey()
-                if (key != null) {
-                    fetchViaApi(key)
-                    return
-                }
-                throw java.io.IOException("Server returned HTTP 403. CurseForge blocks direct scraping; provide an API key via CURSEFORGE_API_KEY env or run/curseforge_key.txt to use the CurseForge API as a fallback.")
-            }
-            parseSearchHtml(resp.body())
-        } catch (e: java.io.IOException) {
-            val key = readApiKey()
-            if (key != null) {
-                try {
-                    fetchViaApi(key)
-                    return
-                } catch (e2: Exception) {
-                    e2.printStackTrace()
-                }
-            }
-            throw e
-        }
-    }
-
-    private fun readApiKey(): String? {
-        try {
-            val env = System.getenv("CURSEFORGE_API_KEY")
-            if (!env.isNullOrBlank()) return env
-        } catch (_: Throwable) { }
-        try {
-            val runDir = File(System.getProperty("user.dir"), "run")
-            val f1 = File(runDir, "curseforge_key.txt")
-            if (f1.exists()) return f1.readText().trim()
-            val f2 = File(runDir, "curseforge_api_key.txt")
-            if (f2.exists()) return f2.readText().trim()
-        } catch (_: Throwable) { }
-        return null
-    }
-    private fun fetchViaApi(apiKey: String) {
-        val q = "https://api.curseforge.com/v1/mods/search?gameId=432&gameVersion=1.21.4&pageSize=20"
-        val req = HttpRequest.newBuilder()
-            .uri(URI.create(q))
-            .timeout(Duration.ofSeconds(15))
-            .header("User-Agent", "ElderClient/1.0")
-            .header("Accept", "application/json")
-            .header("x-api-key", apiKey)
-            .GET()
-            .build()
-
-        val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
-        if (resp.statusCode() != 200) throw java.io.IOException("CurseForge API returned HTTP ${resp.statusCode()}")
-        parseApiJson(resp.body())
-    }
-
-    private fun parseApiJson(json: String) {
-        results.clear()
-        // very small parser: pick up slug and name values in order
-        val slugRegex = Regex("\"slug\"\\s*:\\s*\"([^\\\"]+)\"")
-        val nameRegex = Regex("\"name\"\\s*:\\s*\"([^\\\"]+)\"")
-        val slugs = slugRegex.findAll(json).map { it.groupValues[1] }.toList()
-        val names = nameRegex.findAll(json).map { it.groupValues[1] }.toList()
-        val count = minOf(slugs.size, names.size)
-        for (i in 0 until count) {
-            val slug = slugs[i]
-            val name = names[i]
-            val full = "https://www.curseforge.com/minecraft/mc-mods/$slug"
-            if (results.none { it.slug == slug }) results.add(SearchResult(name, slug, full))
-        }
-    }
-
-    private fun parseSearchHtml(html: String) {
-        results.clear()
-        val regex = Regex("<a\\s+href=\"(/minecraft/mc-mods/([\\w-]+))\"[^>]*>([^<]+)</a>", RegexOption.IGNORE_CASE)
-        for (m in regex.findAll(html)) {
-            try {
-                val path = m.groupValues[1]
-                val slug = m.groupValues[2]
-                val title = m.groupValues[3].trim()
-                val full = "https://www.curseforge.com$path"
-                if (results.none { it.slug == slug }) {
-                    results.add(SearchResult(title, slug, full))
-                }
-            } catch (_: Throwable) {}
-        }
     }
 
     private fun downloadProjectLatest(urlOrSlug: String): Boolean {
-        val client = minecraft ?: return false
-        try {
-            val directUrl = if (urlOrSlug.startsWith("http://") || urlOrSlug.startsWith("https://")) {
-                urlOrSlug
-            } else {
-                "https://www.curseforge.com/minecraft/mc-mods/$urlOrSlug/download"
-            }
-
-            val req = HttpRequest.newBuilder()
-                .uri(URI.create(directUrl))
-                .timeout(Duration.ofSeconds(60))
-                .header("User-Agent", "Mozilla/5.0")
-                .GET()
-                .build()
-
-            val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream())
-            if (resp.statusCode() !in 200..299) throw java.io.IOException("Download returned HTTP ${resp.statusCode()}")
-
-            val finalUri = resp.uri()
-            val cd = resp.headers().firstValue("content-disposition").orElse(null)
-            val fileName = when {
-                cd != null && cd.contains("filename=") -> cd.substringAfter("filename=").trim('"')
-                else -> {
-                    val path = finalUri.path
-                    path.substringAfterLast('/').takeIf { it.isNotBlank() } ?: "downloaded-mod.jar"
-                }
-            }
-
-            BufferedInputStream(resp.body()).use { input ->
-                val modsDir = ModsManager.modsDir(client)
-                if (!modsDir.exists()) modsDir.mkdirs()
-                val outFile = File(modsDir, fileName)
-                FileOutputStream(outFile).use { fos ->
-                    val buffer = ByteArray(8192)
-                    var read: Int
-                    while (true) {
-                        read = input.read(buffer)
-                        if (read <= 0) break
-                        fos.write(buffer, 0, read)
-                    }
-                }
-            }
-
-            return true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return false
-        }
+        return false
     }
 
-    private fun tryFetchHtml(urlStr: String): String {
-        val req = HttpRequest.newBuilder()
-            .uri(URI.create(urlStr))
-            .timeout(Duration.ofSeconds(10))
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
-            .header("Accept", "text/html")
-            .header("Referer", "https://www.curseforge.com/")
-            .GET()
-            .build()
-        val resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString())
-        if (resp.statusCode() == 403) throw java.io.IOException("HTTP 403: access denied by server (embedding/scraping blocked)")
-        return resp.body()
-    }
-
-    private fun loadRemoteModsList(remoteUrl: String): Boolean {
+    private fun loadRemoteModsList(): Boolean {
+        val remoteUrl = "https://etme-tech.me/Elderclient/mods.json"
         try {
             try {
                 val req = HttpRequest.newBuilder()
@@ -356,8 +275,10 @@ class ModsBrowserScreen : Screen(Component.literal("Mods Browser")) {
             val urlRegex = Regex("\"url\"\\s*:\\s*\"([^\\\"]+)\"")
             for (m in objRegex.findAll(text)) {
                 val obj = m.value
-                val name = nameRegex.find(obj)?.groupValues?.get(1)?.trim() ?: continue
-                val url = urlRegex.find(obj)?.groupValues?.get(1)?.trim() ?: continue
+                val nameMatch = nameRegex.find(obj)
+                val urlMatch = urlRegex.find(obj)
+                val name = if (nameMatch != null && nameMatch.groupValues.size > 1) nameMatch.groupValues[1].trim() else continue
+                val url = if (urlMatch != null && urlMatch.groupValues.size > 1) urlMatch.groupValues[1].trim() else continue
                 val slug = if (url.startsWith("http://") || url.startsWith("https://")) url.substringAfterLast('/').substringBefore('?') else url
                 results.add(SearchResult(name, slug, url))
             }
