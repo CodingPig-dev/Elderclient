@@ -48,6 +48,11 @@
    "name": "Eating Animation", 
    "url": "https://cdn.modrinth.com/data/rUgZvGzi/versions/Mr1c5IWQ/eating-animation-1.21.3%2B1.9.73.jar", 
    "license": "MIT, made by @theoness1 & @PinkGoosik"
+ },
+ { 
+   "name": "Wavey Capes", 
+   "url": "https://cdn.modrinth.com/data/kYuIpRLv/versions/oDyV6XDK/waveycapes-fabric-1.8.1-mc1.21.4.jar", 
+   "license": "tr7zw Protective License, made by @tr7zw"
  }
 ]
 
