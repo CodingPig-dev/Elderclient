@@ -28,6 +28,11 @@
    "name": "Apple Skin", 
    "url": "https://cdn.modrinth.com/data/EsAfCjCV/versions/cHQjeYVS/appleskin-fabric-mc1.21.3-3.0.6.jar", 
    "license": "Unlicense, made by @squeek502"
+ },
+   { 
+   "name": "Entity Culling", 
+   "url": "https://cdn.modrinth.com/data/NNAgCjsB/versions/wKJCglL7/entityculling-fabric-1.9.4-mc1.21.4.jar", 
+   "license": "tr7zw Protective License, made by @tr7zw"
  }
 ]
 
