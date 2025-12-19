@@ -9,6 +9,11 @@
     "url": "https://cdn.modrinth.com/data/YL57xq9U/versions/Ca054sTe/iris-fabric-1.8.8%2Bmc1.21.4.jar",
     "license": "LGPL‑3.0‑only, made by @coderbot and @IMS"
   },
+ {
+    "name": "BetterF3",
+    "url": "https://cdn.modrinth.com/data/8shC1gFX/versions/729ec3Jf/BetterF3-13.0.0-Fabric-1.21.4.jar",
+    "license": "MIT, made by @TreyRuffy and @cominixo"
+  },
  { 
    "name": "ReplayMod", 
    "url": "https://cdn.modrinth.com/data/Nv2fQJo5/versions/Ax2S4lln/replaymod-1.21.4-2.6.23.jar", 
